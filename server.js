@@ -27,18 +27,16 @@ app.get('/api/drive', async (req, res) => {
     console.log("Starting processing /api/drive")
     try {
         const files = await fs.promises.readdir(rootPath, {withFileTypes: true});
-        console.log(files);
         const filesJson = files.map( (file) => {
             let fileObj = {} ;
             fileObj.name = file.name;
             fileObj.isFolder = false;
             fileObj.isFolder = file.isDirectory();
             if (file.isFile()) fileObj.size = getFileSize(path.join(file.path, file.name));
-            // console.log(path.join(file.path, file.name));
-            console.log(fileObj);
             return fileObj;
         })
         res.send(filesJson);
+        res.status(200);
 
     } catch (err) {
         res.status(500);

@@ -6,7 +6,7 @@ import * as os from "node:os";
 const app = express()
 const port = 3000
 
-const racinePath = path.join(os.tmpdir(), "drivetmp");
+const rootPath = path.join(os.tmpdir(), "alpsdrive");
 
 app.use(function (req, res, next) {
     res.setHeader("Access-Control-Allow-Origin", "*");
@@ -15,21 +15,33 @@ app.use(function (req, res, next) {
     next();
 });
 
+function getFileSize(filePath) {
+    try {
+        const stats = fs.statSync(filePath);
+        return stats.size;
+    } catch (err) {
+        console.log(err.message);
+    }
+}
 app.get('/api/drive', async (req, res) => {
     console.log("Starting processing /api/drive")
     try {
-        const files = await fs.promises.readdir(racinePath);
+        const files = await fs.promises.readdir(rootPath, {withFileTypes: true});
         console.log(files);
-        for (const file of files)  console.log(file);
         const filesJson = files.map( (file) => {
             let fileObj = {} ;
-            fileObj.name = file;
-            // fileObj.isFolder = file.isDirectory();
+            fileObj.name = file.name;
+            fileObj.isFolder = false;
+            fileObj.isFolder = file.isDirectory();
+            if (file.isFile()) fileObj.size = getFileSize(path.join(file.path, file.name));
+            // console.log(path.join(file.path, file.name));
+            console.log(fileObj);
             return fileObj;
         })
         res.send(filesJson);
 
     } catch (err) {
+        res.status(500);
         console.error(err);
     }
 

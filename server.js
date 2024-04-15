@@ -15,32 +15,101 @@ app.use(function (req, res, next) {
     next();
 });
 
-function getFileSize(filePath) {
+async function getFileSize(filePath) {
     try {
-        const stats = fs.statSync(filePath);
+        const stats = await fs.promises.stat(filePath);
         return stats.size;
     } catch (err) {
         console.log(err.message);
     }
 }
+
+async function getDirectoryContents(myPath, filesJson) {
+    try {
+        const files = await fs.promises.readdir(myPath, {withFileTypes: true});
+        for (const file of files) {
+            console.log(file);
+            let fileDesc = {name: file.name, isFolder: file.isDirectory()};
+            if (file.isFile()) {
+                const size = await getFileSize(path.join(file.path, file.name));
+                // Autre syntaxe : fileDesc = {...fileDesc, size: size};
+                fileDesc = {...fileDesc, size};
+            }
+            filesJson.push(fileDesc);
+        }
+        return true
+    } catch (err) {
+        console.error(err);
+        return false
+    }
+}
+
+async function getFileContent(myPath, fileContent) {
+    try {
+        fileContent = await fs.promises.readFile(myPath, { encoding: 'utf8'});
+        return true
+    } catch (err) {
+        return false
+    }
+}
+
 app.get('/api/drive', async (req, res) => {
     console.log("Starting processing /api/drive")
-    try {
-        const files = await fs.promises.readdir(rootPath, {withFileTypes: true});
-        const filesJson = files.map( (file) => {
-            let fileObj = {} ;
-            fileObj.name = file.name;
-            fileObj.isFolder = false;
-            fileObj.isFolder = file.isDirectory();
-            if (file.isFile()) fileObj.size = getFileSize(path.join(file.path, file.name));
-            return fileObj;
-        })
-        res.send(filesJson);
-        res.status(200);
-
-    } catch (err) {
+    const filesJson = [];
+    if (await getDirectoryContents(rootPath, filesJson)) {
+        res.status(200).send(filesJson);
+    } else {
         res.status(500);
-        console.error(err);
+    }
+
+})
+
+app.get('/api/drive/:name', async (req, res) => {
+    console.log(req.params);
+    console.log("XXX Starting processing /api/drive/" + req.params.name);
+    const jsonOutput = [];
+    const myPath = path.join(os.tmpdir(), "alpsdrive", req.params.name);
+    const stats = await fs.promises.stat(myPath);
+    if(stats.isDirectory()) {
+        if (await getDirectoryContents(myPath, jsonOutput)) {
+            res.status(200).send(jsonOutput);
+        } else {
+            res.status(500);
+        }
+    } else {
+        // file : get file content
+        const fileContent = '';
+        if (await getFileContent(myPath, fileContent)) {
+            res.status(200);
+            res.sendFile(myPath, {headers: {'Content-Type' : 'application/octet-stream' }} );
+        } else {
+            res.status(500);
+        }
+    }
+
+})
+
+app.get('/api/drive/:folder/:name', async (req, res) => {
+    console.log(req.params);
+    console.log("Starting processing /api/drive/" + req.params.folder + "/" + req.params.name);
+    const myPath = path.join(os.tmpdir(), "alpsdrive", req.params.folder, req.params.name);
+    console.log(myPath);
+    const stats = await fs.promises.stat(myPath);
+    if(stats.isDirectory()) {
+        if (await getDirectoryContents(myPath, jsonOutput)) {
+            res.status(200).send(jsonOutput);
+        } else {
+            res.status(500);
+        }
+    } else {
+        // file : get file content
+        const fileContent = '';
+        if (await getFileContent(myPath, fileContent)) {
+            res.status(200);
+            res.sendFile(myPath, {headers: {'Content-Type' : 'application/octet-stream' }} );
+        } else {
+            res.status(500);
+        }
     }
 
 })

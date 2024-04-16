@@ -1,19 +1,26 @@
-import express from 'express'
+import express from 'express';
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
-import * as constants from "node:constants";
+import bb from 'express-busboy';
 
 const app = express()
 const port = 3000
 
 const rootPath = path.join(os.tmpdir(), "alpsdrive");
+const tmpPath = path.join(os.tmpdir(), "alpsdrive/tmp");
 
 app.use(function (req, res, next) {
     res.setHeader("Access-Control-Allow-Origin", "*");
     res.setHeader('Access-Control-Allow-Methods', '*');
     res.setHeader("Access-Control-Allow-Headers", "*");
     next();
+});
+
+bb.extend(app, {
+    upload: true,
+    path: tmpPath,
+    allowedPath: /./
 });
 
 // ======================= FUNCTIONS =======================
@@ -70,7 +77,7 @@ async function getFileOrDir(res, filename) {
     } catch (err) {
         // The check failed
         console.log("Nom d'un chien ! Ce fichier ou dossier n'existe pas !", filename);
-        return res.status(404).send("Nom d'un chien ! Ce fichier ou dossier n'existe pas !" + filename);
+        return res.status(404).send("<h1>Nom d'un chien de 404 ! Ce fichier ou dossier n'existe pas !</h1> <h3>" + filename + "</h3>");
     }
 
     const stats = await fs.promises.stat(filename);
@@ -95,13 +102,7 @@ async function createDirectory(dirPath) {
 }
 
 async function deleteFileOrDir(name) {
-    // try {
     return await fs.promises.rm(name, {recursive: true});
-    // return true;
-    // } catch (err) {
-    //     console.error(err);
-    //     return false;
-    // }
 }
 
 function checkFileName(name) {
@@ -122,7 +123,6 @@ app.get('/api/drive/:name', async (req, res) => {
     console.log("Starting processing /api/drive/" + req.params.name);
     const myPath = path.join(os.tmpdir(), "alpsdrive", req.params.name);
     await getFileOrDir(res, myPath);
-    // res.status(404);
 })
 
 app.get('/api/drive/:folder/:name', async (req, res) => {
@@ -178,11 +178,32 @@ app.delete('/api/drive/:folder/:name', async (req, res) => {
     await getDirectoryContents(rootPath, res);
 })
 
-// Créer un fichier à la racine du “drive
-
+// Créer un fichier à la racine du “drive : PUT /api/drive
+app.put('/api/drive', async (req, res) => {
+    // magically upload file thanks to busboy.
+    console.log("Uploading file...");
+    // move file to the correct location : racine du drive
+    await fs.promises.rename(req.files.file.file, path.join(os.tmpdir(), "alpsdrive", req.files.file.filename));
+    await getDirectoryContents(rootPath, res);
+    // cleanup busboy tmp dir
+    // const tmpDir = path.join(tmpPath, req.files.file.uuid)
+    await deleteFileOrDir(tmpPath);
+})
 
 // Créer un fichier dans {folder}
-
+app.put('/api/drive/:folder', async (req, res) => {
+    // File is already magically uploaded to tmpPath thanks to busboy.
+    console.log("Uploading file into folder : ", req.params.folder);
+    console.log(req.files);
+    // move file to the correct location :
+    const destDir = path.join(os.tmpdir(), "alpsdrive", req.params.folder);
+    const destFile = path.join(destDir , req.files.file.filename);
+    await fs.promises.rename(req.files.file.file, destFile);
+    // display directory again... with the file removed :
+    await getDirectoryContents(destDir, res);
+    // cleanup busboy tmp dir
+    await deleteFileOrDir(tmpPath);
+})
 
 // Start server : listen on port
 export function start() {

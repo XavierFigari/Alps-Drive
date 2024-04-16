@@ -81,6 +81,8 @@ async function createDirectory(dirPath) {
 }
 
 function checkPath(dirPath) {
+    const regExp = '^[a-zA-Z]+$';
+    return regExp.test(dirPath);
 }
 
 
@@ -100,11 +102,12 @@ app.post('/api/drive', async (req, res) => {
     console.log("Starting processing 'create directory' with POST request : name=", req.query.name);
     const dirPath = path.join(os.tmpdir(), "alpsdrive", req.query.name);
     // Make sure name contains only allowed alphanumeric characters
-    checkPath(dirPath);
-    // Create directory
-    await createDirectory(dirPath);
-    // Display
-    await getDirectoryContents(rootPath, res);
+    if (checkPath(dirPath)) {
+        // Create directory
+        await createDirectory(dirPath);
+        // Display
+        await getDirectoryContents(rootPath, res);
+    }
 })
 
 app.get('/api/drive', async (req, res) => {

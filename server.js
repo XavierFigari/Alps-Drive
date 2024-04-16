@@ -80,8 +80,18 @@ async function createDirectory(dirPath) {
     }
 }
 
+async function deleteFileOrDir(name) {
+    // try {
+        return await fs.promises.rm(name, {recursive: true});
+        // return true;
+    // } catch (err) {
+    //     console.error(err);
+    //     return false;
+    // }
+}
+
 function checkFileName(name) {
-    const regExp = /^[a-zA-Z]+$/ ;
+    const regExp = /^[a-zA-Z]+$/;
     return regExp.test(name);
 }
 
@@ -126,6 +136,17 @@ app.post('/api/drive/:folder/', async (req, res) => {
     }
 })
 
+// Suppression d’un dossier ou d’un fichier avec le nom {name} : DELETE /api/drive/{name}
+app.delete('/api/drive/:name', async (req, res) => {
+    console.log("Starting processing 'delete directory' with DELETE request : name=", req.params.name);
+    const dirPath = path.join(os.tmpdir(), "alpsdrive", req.params.name);
+    await deleteFileOrDir(dirPath);
+    // Display again
+    await getDirectoryContents(rootPath, res);
+})
+
+
+// Afficher le contenu de /
 app.get('/api/drive', async (req, res) => {
     console.log("Starting processing /api/drive")
     await getDirectoryContents(rootPath, res);

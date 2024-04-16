@@ -2,6 +2,7 @@ import express from 'express'
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
+import * as constants from "node:constants";
 
 const app = express()
 const port = 3000
@@ -14,6 +15,8 @@ app.use(function (req, res, next) {
     res.setHeader("Access-Control-Allow-Headers", "*");
     next();
 });
+
+// ======================= FUNCTIONS =======================
 
 async function getFileSize(filePath) {
     try {
@@ -56,18 +59,29 @@ async function getFileContent(myPath, fileContent) {
     }
 }
 
-async function getFileOrDir(res, myPath) {
+async function getFileOrDir(res, filename) {
     const jsonOutput = [];
     console.log("Entering getFileOrDirs");
-    const stats = await fs.promises.stat(myPath);
+
+    // Check if the file exists in the current directory.
+    try {
+        await fs.promises.access(filename);
+        // The check succeeded
+    } catch (err) {
+        // The check failed
+        console.log("Nom d'un chien ! Ce fichier ou dossier n'existe pas !", filename);
+        return res.status(404).send("Nom d'un chien ! Ce fichier ou dossier n'existe pas !" + filename);
+    }
+
+    const stats = await fs.promises.stat(filename);
     if (stats.isDirectory()) {
         console.log("-> directory !");
-        await getDirectoryContents(myPath, res);
+        await getDirectoryContents(filename, res);
     } else {
         console.log("-> File !")
-        res.status(200);
-        res.sendFile(myPath, {headers: {'Content-Type': 'application/octet-stream'}});
+        res.status(200).sendFile(filename, {headers: {'Content-Type': 'application/octet-stream'}});
     }
+
 }
 
 async function createDirectory(dirPath) {
@@ -82,8 +96,8 @@ async function createDirectory(dirPath) {
 
 async function deleteFileOrDir(name) {
     // try {
-        return await fs.promises.rm(name, {recursive: true});
-        // return true;
+    return await fs.promises.rm(name, {recursive: true});
+    // return true;
     // } catch (err) {
     //     console.error(err);
     //     return false;
@@ -95,11 +109,20 @@ function checkFileName(name) {
     return regExp.test(name);
 }
 
+// ======================= API REQUESTS =======================
 
+// Retourne une liste contenant les dossiers et fichiers à la racine du “drive”
+app.get('/api/drive', async (req, res) => {
+    console.log("Starting processing /api/drive")
+    await getDirectoryContents(rootPath, res);
+})
+
+// Retourne le contenu de {name} : GET /api/drive/{name}
 app.get('/api/drive/:name', async (req, res) => {
     console.log("Starting processing /api/drive/" + req.params.name);
     const myPath = path.join(os.tmpdir(), "alpsdrive", req.params.name);
     await getFileOrDir(res, myPath);
+    // res.status(404);
 })
 
 app.get('/api/drive/:folder/:name', async (req, res) => {
@@ -155,13 +178,13 @@ app.delete('/api/drive/:folder/:name', async (req, res) => {
     await getDirectoryContents(rootPath, res);
 })
 
+// Créer un fichier à la racine du “drive
 
-// Afficher le contenu de /
-app.get('/api/drive', async (req, res) => {
-    console.log("Starting processing /api/drive")
-    await getDirectoryContents(rootPath, res);
-})
 
+// Créer un fichier dans {folder}
+
+
+// Start server : listen on port
 export function start() {
     app.listen(port, () => {
         console.log(`Server is listening on port ${port}`)

@@ -138,8 +138,18 @@ app.post('/api/drive/:folder/', async (req, res) => {
 
 // Suppression d’un dossier ou d’un fichier avec le nom {name} : DELETE /api/drive/{name}
 app.delete('/api/drive/:name', async (req, res) => {
-    console.log("Starting processing 'delete directory' with DELETE request : name=", req.params.name);
+    console.log("Starting processing 'delete' with DELETE request : name=", req.params.name);
     const dirPath = path.join(os.tmpdir(), "alpsdrive", req.params.name);
+    await deleteFileOrDir(dirPath);
+    // Display again
+    await getDirectoryContents(rootPath, res);
+})
+
+// Suppression d’un dossier ou d’un fichier avec le nom {name} dans {folder} : DELETE /api/drive/{folder}/{name}
+app.delete('/api/drive/:folder/:name', async (req, res) => {
+    console.log("Starting processing 'delete inside folder' with DELETE request : folder=", req.params.folder, " name=", req.params.name);
+    const dirPath = path.join(os.tmpdir(), "alpsdrive", req.params.folder, req.params.name);
+    console.log("File or folder to delete =", dirPath);
     await deleteFileOrDir(dirPath);
     // Display again
     await getDirectoryContents(rootPath, res);

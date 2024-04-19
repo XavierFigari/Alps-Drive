@@ -174,7 +174,7 @@ app.get('/api/drive/:folder/:name', async (req, res) => {
 // =================================================================
 // Return status : 400 if name contains non-alphanum characters
 app.post('/api/drive', async (req, res) => {
-    console.log("Starting processing 'create directory' with POST request : name=", req.query.name);
+    console.log("Processing 'create directory' with POST request : name=", req.query.name);
     const dirPath = path.join(os.tmpdir(), "alpsdrive", req.query.name);
     // Make sure name contains only allowed alphanumeric characters
     if (!checkFileName(req.query.name)) {

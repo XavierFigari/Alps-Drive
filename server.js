@@ -27,6 +27,9 @@ bb.extend(app, {
 
 // ======================= FUNCTIONS =======================
 
+// ---------------------------------------------------------
+// Returns file size
+// ---------------------------------------------------------
 async function getFileSize(filePath) {
     try {
         const stats = await fs.promises.stat(filePath);
@@ -36,9 +39,11 @@ async function getFileSize(filePath) {
     }
 }
 
-async function getDirectoryContents(myPath, res) {
+// ---------------------------------------------------------
+// Returns a list of files and folders in Json format
+// ---------------------------------------------------------
+async function getDirectoryContents(myPath) {
     const filesJson = [];
-
     try {
         const files = await fs.promises.readdir(myPath, {withFileTypes: true});
         for (const file of files) {
@@ -50,25 +55,16 @@ async function getDirectoryContents(myPath, res) {
             }
             filesJson.push(fileDesc);
         }
-        // return filesJson
-        res.status(200).send(filesJson);
-        return true
+        return filesJson
     } catch (err) {
-        res.status(500);
         console.error(err);
-        return false
+        throw err;
     }
 }
 
-async function getFileContent(myPath, fileContent) {
-    try {
-        await fs.promises.readFile(myPath, {encoding: 'utf8'});
-        return true
-    } catch (err) {
-        return false
-    }
-}
-
+// ---------------------------------------------------------
+// Returns true if filename exists
+// ---------------------------------------------------------
 async function fileOrDirExists(filename) {
     console.log("Entering fileOrDirExists with filename = ", filename);
     try {
@@ -81,42 +77,54 @@ async function fileOrDirExists(filename) {
     }
 }
 
-async function getFileOrDir(res, filename) {
-    const jsonOutput = [];
-    console.log("Entering getFileOrDirs");
-
-    // Check if the file exists in the current directory.
-    if (!await fileOrDirExists(filename)) {
-        // The check failed
-        console.log("Ce fichier ou dossier n'existe pas !", filename);
+// ---------------------------------------------------------
+// If it's a directory, returns a list of files/dirs
+// If it's a file, returns its content
+// ---------------------------------------------------------
+async function getContentOr404(myPath, res) {
+    try {
+        if (!await fileOrDirExists(myPath)) {
+            throw 404 ;
+        }
+        const stats = await fs.promises.stat(myPath);
+        if (stats.isDirectory()) {
+            res.status(200).send(await getDirectoryContents(myPath, res));
+        } else {
+            res.status(200).sendFile(myPath, {headers: {'Content-Type': 'application/octet-stream'}});
+        }
+    } catch (err) {
         // The .status() method on the res object will set a HTTP status code of 404. To send the status code to the
         // client-side, you can method chain using the .send() method : res.status(404).send('Not Found');
-        return res.status(404).send("<h1>404 ! Ce fichier ou dossier n'existe pas !</h1> <h3>" + filename + "</h3>");
-    }
-
-    const stats = await fs.promises.stat(filename);
-    if (stats.isDirectory()) {
-        console.log("-> directory !");
-        await getDirectoryContents(filename, res);
-    } else {
-        console.log("-> File !")
-        res.status(200).sendFile(filename, {headers: {'Content-Type': 'application/octet-stream'}});
+        if (err == 404) {
+            return res.status(404).send("Erreur 404 : Ce fichier ou dossier n'existe pas !");
+        } else {
+            return res.status(500).json(err);
+        }
     }
 }
 
+// ---------------------------------------------------------
+// Create directory
+// ---------------------------------------------------------
 async function createDirectory(dirPath) {
     try {
         await fs.promises.mkdir(dirPath);
     } catch (err) {
         console.error(err);
-        throw(err);
+        throw (err);
     }
 }
 
+// ---------------------------------------------------------
+// Delete file or directory
+// ---------------------------------------------------------
 async function deleteFileOrDir(name) {
     return await fs.promises.rm(name, {recursive: true});
 }
 
+// ---------------------------------------------------------
+// Returns true if file name matches regexp
+// ---------------------------------------------------------
 function checkFileName(name) {
     // match any name with :
     // - first part : alphanum characters (\w = [a-zA-Z0-9_]) or '-', one or more times (+)
@@ -134,25 +142,31 @@ function checkFileName(name) {
 // =================================================================
 // Retourne une liste contenant les dossiers et fichiers à la racine du “drive”
 // =================================================================
+// Return status : 200
 app.get('/api/drive', async (req, res) => {
-    console.log("Starting processing /api/drive")
-    await getDirectoryContents(rootPath, res);
+    console.log("Processing /api/drive")
+    try {
+        const filesJson = await getDirectoryContents(rootPath);
+        return res.status(200).send(filesJson);
+    } catch (err) {
+        return res.status(500).json(err);
+    }
 })
 
 // =================================================================
 // Retourne le contenu de {name} : GET /api/drive/{name}
 // =================================================================
-// Return status : 404 if file/dir does not exist : ok : done in function getFileOrDir
+// Return status : 404 if file/dir does not exist
 app.get('/api/drive/:name', async (req, res) => {
-    console.log("Starting processing /api/drive/" + req.params.name);
+    console.log("Processing /api/drive/" + req.params.name);
     const myPath = path.join(os.tmpdir(), "alpsdrive", req.params.name);
-    await getFileOrDir(res, myPath);
+    await getContentOr404(myPath, res);
 })
 
 app.get('/api/drive/:folder/:name', async (req, res) => {
     console.log("Starting processing /api/drive/" + req.params.folder + "/" + req.params.name);
     const myPath = path.join(os.tmpdir(), "alpsdrive", req.params.folder, req.params.name);
-    await getFileOrDir(res, myPath);
+    await getContentOr404(myPath, res);
 })
 
 // =================================================================
@@ -160,19 +174,16 @@ app.get('/api/drive/:folder/:name', async (req, res) => {
 // =================================================================
 // Return status : 400 if name contains non-alphanum characters
 app.post('/api/drive', async (req, res) => {
-    console.log("Starting processing 'create directory' with POST request : name=", req.query.name);
+    console.log("Processing 'create directory' with POST request : name=", req.query.name);
     const dirPath = path.join(os.tmpdir(), "alpsdrive", req.query.name);
     // Make sure name contains only allowed alphanumeric characters
     if (!checkFileName(req.query.name)) {
         res.status(400).send(badFilenameMsg);
         return;
     }
-
     try {
         // Create directory
         await createDirectory(dirPath); // check return status !!
-        // Display
-        // const reponse = await getDirectoryContents(rootPath, res);
         return res.status(201).send();
     } catch (err) {
         return res.status(500).json(err);
@@ -190,15 +201,21 @@ app.post('/api/drive/:folder/', async (req, res) => {
     const dirPath = path.join(os.tmpdir(), "alpsdrive", req.params.folder, req.query.name);
     console.log("Path to create = ", dirPath)
 
-
     // Make sure name contains only allowed alphanumeric characters
-    if (checkFileName(req.query.name)) {
-        // Create directory
-        await createDirectory(dirPath);
-        // Display
-        await getDirectoryContents(rootPath, res);
-    } else {
+    if (!checkFileName(req.query.name)) {
         res.status(400).send(badFilenameMsg);
+        return;
+    }
+    if (! await fileOrDirExists(dirPath)) {
+        res.sendStatus(404);
+    }
+
+    try {
+        // Create directory
+        await createDirectory(dirPath); // check return status !!
+        return res.status(201).send();
+    } catch (err) {
+        return res.status(500).json(err);
     }
 })
 
@@ -208,8 +225,18 @@ app.post('/api/drive/:folder/', async (req, res) => {
 app.delete('/api/drive/:name', async (req, res) => {
     console.log("Starting processing 'delete' with DELETE request : name=", req.params.name);
     const dirPath = path.join(os.tmpdir(), "alpsdrive", req.params.name);
-    await deleteFileOrDir(dirPath);
-    res.sendStatus(200);
+    console.log(dirPath)
+    if (!checkFileName(req.params.name)) {
+        res.status(400).send(badFilenameMsg);
+        return;
+    }
+    try {
+        await fs.promises.rm(dirPath, {recursive: true}) ;
+        res.sendStatus(200);
+    } catch (err) {
+        console.log("Erreur :", err) ;
+        return res.status(500).json(err) ;
+    }
 })
 
 // =================================================================
@@ -219,9 +246,17 @@ app.delete('/api/drive/:folder/:name', async (req, res) => {
     console.log("Starting processing 'delete inside folder' with DELETE request : folder=", req.params.folder, " name=", req.params.name);
     const dirPath = path.join(os.tmpdir(), "alpsdrive", req.params.folder, req.params.name);
     console.log("File or folder to delete =", dirPath);
-    await deleteFileOrDir(dirPath);
-    // Display again
-    await getDirectoryContents(rootPath, res);
+    if (!checkFileName(req.params.name)) {
+        res.status(400).send(badFilenameMsg);
+        return;
+    }
+    try {
+        await fs.promises.rm(dirPath, {recursive: true});
+        res.sendStatus(200);
+    } catch (err) {
+        console.log("Erreur :", err) ;
+        return res.status(500).json(err);
+    }
 })
 
 // =================================================================
@@ -230,11 +265,23 @@ app.delete('/api/drive/:folder/:name', async (req, res) => {
 app.put('/api/drive', async (req, res) => {
     // magically upload file thanks to busboy.
     console.log("Uploading file...");
-    // move file to the correct location : racine du drive
-    await fs.promises.rename(req.files.file.file, path.join(os.tmpdir(), "alpsdrive", req.files.file.filename));
-    await getDirectoryContents(rootPath, res);
+    try {
+        const src = req.files.file.file ;
+        const dst = path.join(os.tmpdir(), "alpsdrive", req.files.file.filename) ;
+        if (! fileOrDirExists(src)) {
+            throw "400"
+        }
+        // move file to the correct location : racine du drive
+        await fs.promises.rename(src, dst);
+        res.sendStatus(201);
+    } catch (err) {
+        if (err == "400") {
+            res.sendStatus(400);
+        } else {
+            res.sendStatus(500);
+        }
+    }
     // cleanup busboy tmp dir
-    // const tmpDir = path.join(tmpPath, req.files.file.uuid)
     await deleteFileOrDir(tmpPath);
 })
 
@@ -245,14 +292,25 @@ app.put('/api/drive/:folder', async (req, res) => {
     // File is already magically uploaded to tmpPath thanks to busboy.
     console.log("Uploading file into folder : ", req.params.folder);
     console.log(req.files);
-    // move file to the correct location :
-    const destDir = path.join(os.tmpdir(), "alpsdrive", req.params.folder);
-    const destFile = path.join(destDir, req.files.file.filename);
-    await fs.promises.rename(req.files.file.file, destFile);
-    // display directory again... with the file removed :
-    await getDirectoryContents(destDir, res);
+    try {
+        const src = req.files.file.file ;
+        const dst = path.join(os.tmpdir(), "alpsdrive", req.params.folder, req.files.file.filename);
+        if (! fileOrDirExists(src)) {
+            throw "400"
+        }
+        // move file to the correct location : racine du drive
+        await fs.promises.rename(src, dst);
+        res.sendStatus(201);
+    } catch (err) {
+        if (err == "400") {
+            res.sendStatus(400);
+        } else {
+            res.sendStatus(500);
+        }
+    }
     // cleanup busboy tmp dir
     await deleteFileOrDir(tmpPath);
+
 })
 
 // =================================================================

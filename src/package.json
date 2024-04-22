@@ -1,1 +1,27 @@
-../package.json
+{
+  "name": "alpsdrive",
+  "version": "1.0.0",
+  "description": "Drive server",
+  "main": "main.js",
+  "type": "module",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "nodemon main.js",
+    "server": "node server.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@github.com/XavierFigari/Alps-Drive.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/XavierFigari/Alps-Drive/issues"
+  },
+  "homepage": "https://github.com/XavierFigari/Alps-Drive#readme",
+  "dependencies": {
+    "express": "^4.19.2",
+    "express-busboy": "^10.1.0",
+    "nodemon": "^3.1.0"
+  }
+}

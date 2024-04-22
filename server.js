@@ -157,37 +157,11 @@ app.get('/api/drive', async (req, res) => {
 // Retourne le contenu de {name} : GET /api/drive/{name}
 // =================================================================
 // Return status : 404 if file/dir does not exist
-app.get('/api/drive/:name', async (req, res) => {
-    console.log("Processing /api/drive/" + req.params.name);
-    const myPath = path.join(os.tmpdir(), "alpsdrive", req.params.name);
-    await getContentOr404(myPath, res);
-})
 
-app.get('/api/drive/:folder/:name', async (req, res) => {
-    console.log("Starting processing /api/drive/" + req.params.folder + "/" + req.params.name);
-    const myPath = path.join(os.tmpdir(), "alpsdrive", req.params.folder, req.params.name);
+app.get('/api/drive/*', async (req, res) => {
+    console.log("Starting processing /api/drive/*");
+    const myPath = path.join(os.tmpdir(), "alpsdrive", req.params[0]);
     await getContentOr404(myPath, res);
-})
-
-// =================================================================
-// Créer un dossier avec le nom {name} : POST /api/drive?name={name}
-// =================================================================
-// Return status : 400 if name contains non-alphanum characters
-app.post('/api/drive', async (req, res) => {
-    console.log("Processing 'create directory' with POST request : name=", req.query.name);
-    const dirPath = path.join(os.tmpdir(), "alpsdrive", req.query.name);
-    // Make sure name contains only allowed alphanumeric characters
-    if (!checkFileName(req.query.name)) {
-        res.status(400).send(badFilenameMsg);
-        return;
-    }
-    try {
-        // Create directory
-        await createDirectory(dirPath); // check return status !!
-        return res.status(201).send();
-    } catch (err) {
-        return res.status(500).json(err);
-    }
 })
 
 // =================================================================
@@ -195,10 +169,10 @@ app.post('/api/drive', async (req, res) => {
 // =================================================================
 // Return status : 400 if name contains non-alphanum characters
 // Return status : 404 if folder does not exist
-app.post('/api/drive/:folder/', async (req, res) => {
+app.post('/api/drive/*', async (req, res) => {
     console.log("Starting processing 'create directory inside folder' with POST request :");
-    console.log("Containing folder =", req.params.folder, "- New folder =", req.query.name);
-    const dirPath = path.join(os.tmpdir(), "alpsdrive", req.params.folder, req.query.name);
+    const containingDir = path.join(os.tmpdir(), "alpsdrive", req.params[0]);
+    const dirPath = path.join(containingDir, req.query.name);
     console.log("Path to create = ", dirPath)
 
     // Make sure name contains only allowed alphanumeric characters
@@ -206,7 +180,7 @@ app.post('/api/drive/:folder/', async (req, res) => {
         res.status(400).send(badFilenameMsg);
         return;
     }
-    if (! await fileOrDirExists(dirPath)) {
+    if (! await fileOrDirExists(containingDir)) {
         res.sendStatus(404);
     }
 
@@ -220,31 +194,11 @@ app.post('/api/drive/:folder/', async (req, res) => {
 })
 
 // =================================================================
-// Suppression d’un dossier ou d’un fichier avec le nom {name} : DELETE /api/drive/{name}
-// =================================================================
-app.delete('/api/drive/:name', async (req, res) => {
-    console.log("Starting processing 'delete' with DELETE request : name=", req.params.name);
-    const dirPath = path.join(os.tmpdir(), "alpsdrive", req.params.name);
-    console.log(dirPath)
-    if (!checkFileName(req.params.name)) {
-        res.status(400).send(badFilenameMsg);
-        return;
-    }
-    try {
-        await fs.promises.rm(dirPath, {recursive: true}) ;
-        res.sendStatus(200);
-    } catch (err) {
-        console.log("Erreur :", err) ;
-        return res.status(500).json(err) ;
-    }
-})
-
-// =================================================================
 // Suppression d’un dossier ou d’un fichier avec le nom {name} dans {folder} : DELETE /api/drive/{folder}/{name}
 // =================================================================
-app.delete('/api/drive/:folder/:name', async (req, res) => {
-    console.log("Starting processing 'delete inside folder' with DELETE request : folder=", req.params.folder, " name=", req.params.name);
-    const dirPath = path.join(os.tmpdir(), "alpsdrive", req.params.folder, req.params.name);
+app.delete('/api/drive/*', async (req, res) => {
+    console.log("Starting processing 'delete inside folder' with DELETE request : folder=", req.params[0]);
+    const dirPath = path.join(os.tmpdir(), "alpsdrive", req.params[0]);
     console.log("File or folder to delete =", dirPath);
     if (!checkFileName(req.params.name)) {
         res.status(400).send(badFilenameMsg);
@@ -260,41 +214,16 @@ app.delete('/api/drive/:folder/:name', async (req, res) => {
 })
 
 // =================================================================
-// Créer un fichier à la racine du “drive : PUT /api/drive
-// =================================================================
-app.put('/api/drive', async (req, res) => {
-    // magically upload file thanks to busboy.
-    console.log("Uploading file...");
-    try {
-        const src = req.files.file.file ;
-        const dst = path.join(os.tmpdir(), "alpsdrive", req.files.file.filename) ;
-        if (! fileOrDirExists(src)) {
-            throw "400"
-        }
-        // move file to the correct location : racine du drive
-        await fs.promises.rename(src, dst);
-        res.sendStatus(201);
-    } catch (err) {
-        if (err == "400") {
-            res.sendStatus(400);
-        } else {
-            res.sendStatus(500);
-        }
-    }
-    // cleanup busboy tmp dir
-    await deleteFileOrDir(tmpPath);
-})
-
-// =================================================================
 // Créer un fichier dans {folder}
 // =================================================================
-app.put('/api/drive/:folder', async (req, res) => {
+app.put('/api/drive/*', async (req, res) => {
     // File is already magically uploaded to tmpPath thanks to busboy.
-    console.log("Uploading file into folder : ", req.params.folder);
-    console.log(req.files);
+    console.log("Uploading file into folder : ", req.params[0]);
+    const src = req.files.file.file ;
+    const dst = path.join(os.tmpdir(), "alpsdrive", req.params[0], req.files.file.filename);
+    console.log("dst = ", dst)
+
     try {
-        const src = req.files.file.file ;
-        const dst = path.join(os.tmpdir(), "alpsdrive", req.params.folder, req.files.file.filename);
         if (! fileOrDirExists(src)) {
             throw "400"
         }
@@ -309,7 +238,7 @@ app.put('/api/drive/:folder', async (req, res) => {
         }
     }
     // cleanup busboy tmp dir
-    await deleteFileOrDir(tmpPath);
+    // await deleteFileOrDir(tmpPath);
 
 })
 
